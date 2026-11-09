@@ -60,6 +60,16 @@ var githubHTTPClient = &http.Client{
 	},
 }
 
+// LatestAssetURL returns the stable public URL of the newest release binary for
+// one platform. GitHub redirects it to the current versioned asset.
+func LatestAssetURL(repo, goos, goarch string) (string, error) {
+	repo = strings.TrimSpace(repo)
+	if strings.Count(repo, "/") != 1 {
+		return "", fmt.Errorf("update: invalid repository %q (expected owner/name)", repo)
+	}
+	return "https://github.com/" + repo + "/releases/latest/download/" + assetNamesFor(goos, goarch)[0], nil
+}
+
 // LatestRelease fetches the newest published release for repo (form
 // "owner/name"). A non-empty token is sent as a Bearer header, which is
 // required for private repositories and lifts the unauthenticated rate limit.

@@ -4,8 +4,22 @@ import type { DeviceDetail } from "./types";
 import type { PublicIPInfo } from "../../types";
 import { useI18n } from "../../lib/i18n";
 import { api, apiMessage } from "../../api";
-import { Button, message } from "../ui";
+import { Button, Input, message } from "../ui";
 import { CountryFlag } from "../CountryFlag";
+import { formatBytes } from "../../lib/utils";
+
+const MIN_CONSUME_KB = 1;
+const MAX_CONSUME_KB = 10240;
+
+interface DataConsumeResult {
+  requestedBytes: number;
+  payloadBytes: number;
+  interfaceMeasured: boolean;
+  interfaceRxBytes: number;
+  interfaceTxBytes: number;
+  complete: boolean;
+  durationMs: number;
+}
 
 export interface OverviewNetworkPanelProps {
   device: DeviceDetail;
@@ -21,6 +35,9 @@ export function OverviewNetworkPanel({ device, trafficMinuteRx, trafficMinuteTx,
   const [publicIP, setPublicIP] = useState<PublicIPInfo | null>(null);
   const [detectingIP, setDetectingIP] = useState(false);
   const [liveSession, setLiveSession] = useState<{ phase?: string; modemPhase?: string; lastError?: string } | null>(null);
+  const [consumeKB, setConsumeKB] = useState("10");
+  const [consuming, setConsuming] = useState(false);
+  const [consumeResult, setConsumeResult] = useState<DataConsumeResult | null>(null);
   const traffic = device.traffic || {};
   const metaStatus = device.trafficMeta?.status;
   const sampleNote = metaStatus === "waiting_sample" ? t("等待采样") : metaStatus === "stale" ? t("采样中断") : "";
@@ -33,6 +50,9 @@ export function OverviewNetworkPanel({ device, trafficMinuteRx, trafficMinuteTx,
     connected: t("已连接"), disabled: t("已关闭"), failed: t("异常"), unknown: t("状态未知"),
   } as Record<string, string>)[sessionPhase] || t("状态未知");
   const displayedSessionState = modemPhase === "rebooting" ? t("模组重启中") : sessionState;
+  const consumeAmount = Number(consumeKB);
+  const consumeAmountValid = Number.isInteger(consumeAmount) && consumeAmount >= MIN_CONSUME_KB && consumeAmount <= MAX_CONSUME_KB;
+  const canConsume = sessionPhase === "connected" && modemPhase !== "rebooting" && consumeAmountValid;
 
   const minuteRx = trafficMinuteRx || sampleNote || traffic.rx;
   const minuteTx = trafficMinuteTx || sampleNote || traffic.tx;
@@ -101,6 +121,27 @@ export function OverviewNetworkPanel({ device, trafficMinuteRx, trafficMinuteTx,
     }
   }
 
+  async function consumeData() {
+    setConsuming(true);
+    try {
+      const result = await api<DataConsumeResult>(`/devices/${encodeURIComponent(device.id)}/network/consume`, { method: "POST", body: { kilobytes: consumeAmount } });
+      setConsumeResult(result);
+      if (result.complete) message.success(t("流量消耗完成"));
+      else message.warning(t("下载提前结束，只消耗了部分流量"));
+    } catch (error) {
+      message.error(apiMessage(error) || t("消耗流量失败"));
+    } finally {
+      setConsuming(false);
+    }
+  }
+
+  const consumeSummary = consumeResult
+    ? [
+        formatBytes(consumeResult.payloadBytes),
+        consumeResult.interfaceMeasured ? `${t("网卡")} ${formatBytes(consumeResult.interfaceRxBytes + consumeResult.interfaceTxBytes)}` : "",
+      ].filter(Boolean).join(" · ")
+    : "";
+
   let countryName = publicIP?.countryCode || "";
   if (publicIP?.countryCode) {
     try {
@@ -143,6 +184,26 @@ export function OverviewNetworkPanel({ device, trafficMinuteRx, trafficMinuteTx,
           <FieldRow label={t("近1分钟下载")} value={minuteRx} monospace />
           <FieldRow label={t("实时下载速率")} value={speedRx} monospace />
           <FieldRow label={t("实时上传速率")} value={speedTx} monospace />
+          <div className="flex w-full min-w-0 items-center justify-between gap-3">
+            <span className="shrink-0 whitespace-nowrap text-gray-500">{t("消耗流量")}</span>
+            <div className="flex min-w-0 items-center justify-end gap-2">
+              <Input
+                className="w-28"
+                type="number"
+                inputMode="numeric"
+                min={MIN_CONSUME_KB}
+                max={MAX_CONSUME_KB}
+                step={1}
+                value={consumeKB}
+                suffix="KB"
+                disabled={consuming}
+                aria-label={t("消耗流量")}
+                onChange={(event) => setConsumeKB(event.target.value)}
+              />
+              <Button size="small" loading={consuming} disabled={!canConsume} onClick={() => void consumeData()}>{t("消耗")}</Button>
+            </div>
+          </div>
+          {consumeResult ? <FieldRow label={t("上次消耗")} value={consumeSummary} monospace /> : null}
           </>
         )}
       </div>

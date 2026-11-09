@@ -97,6 +97,9 @@ type Server struct {
 	publicIPMu                sync.RWMutex
 	publicIPs                 map[string]cachedPublicIP
 	lookupPublicIP            func(context.Context, string) (exportproxy.PublicIPInfo, error)
+	consumeDownload           func(context.Context, string, string, int64) (exportproxy.ConsumeResult, error)
+	dataConsumeMu             sync.Mutex
+	dataConsumeBusy           map[string]struct{}
 	automaticTasks            *automaticTaskScheduler
 	smsSyncMu                 sync.Mutex
 	esimSIMResetAttempted     map[string]bool // 由 smsSyncMu 保护；读取成功后允许下一次故障恢复。

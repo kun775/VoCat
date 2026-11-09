@@ -689,6 +689,11 @@ func (s *Server) handleDevicePath(
 			iccid = entry.Snapshot.ICCID
 		}
 		return s.handleCellularPublicIP(w, r, config, iccid)
+	case "network/consume":
+		if !s.requirePhysicalDevice(w, physicalPresent) {
+			return true
+		}
+		return s.handleCellularDataConsume(w, r, config)
 	case "usbnet-mode":
 		if !s.requirePhysicalDevice(w, physicalPresent) {
 			return true

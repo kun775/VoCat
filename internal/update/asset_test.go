@@ -29,6 +29,22 @@ func TestAssetNamesFor(t *testing.T) {
 	}
 }
 
+func TestLatestAssetURL(t *testing.T) {
+	got, err := LatestAssetURL(" owner/repo ", "linux", "arm64")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "https://github.com/owner/repo/releases/latest/download/vocat-linux-arm64"
+	if got != want {
+		t.Fatalf("LatestAssetURL() = %q, want %q", got, want)
+	}
+	for _, repo := range []string{"", "owner", "owner/repo/extra"} {
+		if _, err := LatestAssetURL(repo, "linux", "amd64"); err == nil {
+			t.Errorf("LatestAssetURL(%q) succeeded", repo)
+		}
+	}
+}
+
 func TestDownloadAssetWithProgressVerifiesPublishedSize(t *testing.T) {
 	payload := bytes.Repeat([]byte("vocat"), 4096)
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
